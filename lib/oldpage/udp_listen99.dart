@@ -5,6 +5,7 @@ import 'package:p9_rgbridge/db/db_helper.dart';
 import 'package:p9_rgbridge/services/device_discovery.dart';
 import 'package:p9_rgbridge/services/mqtt_service.dart';
 import 'package:p9_rgbridge/share/styled_text.dart'; // Contains discoverMqttBrokerViaMdns()
+import 'package:p9_rgbridge/models/device.dart';
 
 class UdpListenerPage extends StatefulWidget {
   const UdpListenerPage({super.key});
@@ -55,6 +56,11 @@ class _UdpListenerPageState extends State<UdpListenerPage> {
             setState(() {
               receivedMessages.insert(0, displayMessage);
             });
+            final match = RegExp(r'DL8_[A-F0-9]+').firstMatch(message);
+            if (match != null) {
+              latestDeviceId = match.group(0); // ✅ Update global variable
+              debugPrint('🌐 New Device ID received: $latestDeviceId');
+            }
           }
         }
       });

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:p9_rgbridge/db/db_helper.dart';
+import 'package:p9_rgbridge/models/device.dart';
 import 'package:p9_rgbridge/services/device_discovery.dart';
 import 'package:p9_rgbridge/services/mqtt_connection.dart';
 import 'package:p9_rgbridge/services/mqtt_service.dart';
@@ -139,6 +140,15 @@ class _UdpListenerPageState extends State<UdpListenerPage> {
             setState(() {
               receivedMessages.insert(0, displayMessage);
             });
+            final match = RegExp(r'DL8_[A-F0-9]+').firstMatch(message);
+            if (match != null) {
+              latestDeviceId = match.group(0); // ✅ Update global variable
+              if (latestDeviceId != null) {
+                await DBHelper.saveDeviceId(latestDeviceId!); // ✅ use ! to assert non-null
+                debugPrint('🌐 New Device ID received: $latestDeviceId');
+              }
+              debugPrint('🌐 New Device ID received: $latestDeviceId');
+            }
           }
         }
       });

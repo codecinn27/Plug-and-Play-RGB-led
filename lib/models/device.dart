@@ -7,3 +7,5 @@ class Device {
   
   Device({required this.id, required this.ip, required this.name});
 }
+
+String? latestDeviceId;

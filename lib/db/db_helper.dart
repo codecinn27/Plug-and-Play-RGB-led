@@ -27,6 +27,12 @@ class DBHelper {
             timestamp TEXT
           )
         ''');
+        await db.execute('''
+          CREATE TABLE device_info (
+            id INTEGER PRIMARY KEY,
+            device_id TEXT
+          )
+        ''');
       },
     );
   }
@@ -53,5 +59,28 @@ class DBHelper {
     final db = await DBHelper.database;
     await db.delete('messages');
   }
+
+  // Save or update latest device ID
+  static Future<void> saveDeviceId(String deviceId) async {
+    final db = await database;
+    await db.insert(
+      'device_info',
+      {'id': 1, 'device_id': deviceId},
+      conflictAlgorithm: ConflictAlgorithm.replace, // ✅ always keep latest
+    );
+  }
+
+  // Retrieve saved device ID (returns null if not found)
+  static Future<String?> getSavedDeviceId() async {
+    final db = await database;
+    final List<Map<String, dynamic>> result =
+        await db.query('device_info', where: 'id = ?', whereArgs: [1]);
+
+    if (result.isNotEmpty) {
+      return result.first['device_id'] as String;
+    }
+    return null;
+  }
+
 
 }
