@@ -6,6 +6,7 @@ import 'package:mqtt_client/mqtt_client.dart';
 import 'package:p9_rgbridge/db/db_helper.dart';
 import 'package:p9_rgbridge/models/device.dart';
 import 'package:p9_rgbridge/services/mqtt_connection.dart';
+import 'package:p9_rgbridge/share/gradient_colour.dart';
 
 class ColorRingControl extends StatefulWidget {
   final MQTTConnection mqttConnection;
@@ -26,6 +27,7 @@ class _ColorRingControlState extends State<ColorRingControl> {
   bool isOn = true;
   String? currentUdpId = 'DL8_00008F50E2'; // ✅ Default value
   Timer? _refreshTimer;
+  String topic = 'rgb/unknown/dfd34'; // initial value
 
   @override
   void initState() {
@@ -36,6 +38,7 @@ class _ColorRingControlState extends State<ColorRingControl> {
       if (savedId != null && mounted) {
         setState(() {
           currentUdpId = savedId;
+          topic = 'rgb/$savedId';
         });
         debugPrint('📥 Loaded saved Device ID: $savedId');
       }
@@ -48,6 +51,7 @@ class _ColorRingControlState extends State<ColorRingControl> {
       if (latestDeviceId != null && latestDeviceId != currentUdpId) {
         setState(() {
           currentUdpId = latestDeviceId;
+          topic = 'rgb/$latestDeviceId';
         });
       }
     });
@@ -66,7 +70,6 @@ class _ColorRingControlState extends State<ColorRingControl> {
       isOn = !isOn;
     });
 
-    final topic = 'rgb/DL8_9A8F8F50E2/dfd34';
     final client = widget.mqttConnection.client;
 
     String payload = isOn
@@ -84,15 +87,36 @@ class _ColorRingControlState extends State<ColorRingControl> {
     }
   }
 
+  void _publishColor(Color color) {
+    final client = widget.mqttConnection.client;
+
+    final payload = '${color.red},${color.green},${color.blue}';
+    print('🎨 Publishing new color: $payload');
+
+    if (client != null && client.connectionStatus?.state == MqttConnectionState.connected) {
+      final builder = MqttClientPayloadBuilder();
+      builder.addString(payload);
+      client.publishMessage(topic, MqttQos.atMostOnce, builder.payload!);
+    } else {
+      print('❌ MQTT client not connected');
+    }
+  }
+
   void _onColorChanged(Color color) {
     setState(() {
       selectedColor = color;
     });
 
-    if (isOn) {
-      _toggleLight(); // re-publish updated color
+    // If the light is off, turn it ON first
+    if (!isOn) {
+      setState(() {
+        isOn = true;
+      });
     }
+
+    _publishColor(color); // ✅ Only publish, don’t toggle
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -114,7 +138,7 @@ class _ColorRingControlState extends State<ColorRingControl> {
                   children: [
                     Container(
                       width: double.infinity,
-                      color: const Color.fromARGB(255, 222, 139, 57), // ✅ Highlight background
+                      decoration: buildSoftGradient(),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Center(
                         child: Text(
@@ -146,27 +170,30 @@ class _ColorRingControlState extends State<ColorRingControl> {
                           ),
                           GestureDetector(
                             onTap: _toggleLight,
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 300),
-                              width: diameter * 0.35,
-                              height: diameter * 0.35,
-                              decoration: BoxDecoration(
-                                color: isOn ? selectedColor : Colors.grey[800],
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: isOn
-                                        ? selectedColor.withOpacity(0.5)
-                                        : Colors.transparent,
-                                    blurRadius: 15,
-                                    spreadRadius: 8,
-                                  )
-                                ],
-                              ),
-                              child: Icon(
-                                Icons.lightbulb,
-                                size: diameter * 0.175,
-                                color: Colors.white,
+                            child: Transform.translate(
+                              offset: Offset(0, -diameter * 0.15), // move up by 15% of diameter
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                width: diameter * 0.4,  // slightly bigger width
+                                height: diameter * 0.4, // slightly bigger height
+                                decoration: BoxDecoration(
+                                  color: isOn ? selectedColor : Colors.grey[800],
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: isOn
+                                          ? selectedColor.withOpacity(0.5)
+                                          : Colors.transparent,
+                                      blurRadius: 15,
+                                      spreadRadius: 8,
+                                    )
+                                  ],
+                                ),
+                                child: Icon(
+                                  Icons.lightbulb,
+                                  size: diameter * 0.2, // bigger icon size
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),

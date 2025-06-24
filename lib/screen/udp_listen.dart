@@ -3,10 +3,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:p9_rgbridge/db/db_helper.dart';
 import 'package:p9_rgbridge/models/device.dart';
+import 'package:p9_rgbridge/notifiers/broker_status_notifier.dart';
 import 'package:p9_rgbridge/services/device_discovery.dart';
 import 'package:p9_rgbridge/services/mqtt_connection.dart';
 import 'package:p9_rgbridge/services/mqtt_service.dart';
-import 'package:p9_rgbridge/share/styled_text.dart'; // Contains discoverMqttBrokerViaMdns()
+import 'package:p9_rgbridge/share/gradient_colour.dart';
+import 'package:p9_rgbridge/share/styled_text.dart';
+import 'package:provider/provider.dart'; // Contains discoverMqttBrokerViaMdns()
 
 class UdpListenerPage extends StatefulWidget {
   final MQTTConnection mqttConnection;
@@ -22,68 +25,87 @@ class _UdpListenerPageState extends State<UdpListenerPage> {
   RawDatagramSocket? socket;
   String brokerStatus = "Initializing...";
   bool isDiscovering = false;
-  
+  late BrokerStatusNotifier brokerNotifier;
   @override
   void initState() {
     super.initState();
+     // Access provider here, context is valid inside initState for this:
+    brokerNotifier = context.read<BrokerStatusNotifier>();
+
     _loadMessages();
     _startListening();
     _updateBrokerStatus();
   }
 
-  void _updateBrokerStatus() {
-    setState(() {
-      if (widget.mqttConnection.isConnected) {
-        brokerStatus = widget.mqttConnection.isLocal
-            ? "✅ Connected to LOCAL broker"
-            : "☁️ Connected to CLOUD broker";
-      } else {
-        brokerStatus = "❌ Not connected to any broker";
-      }
-    });
-  }
-  void _discoverLocalBroker() async {
-    if (isDiscovering) return;
+ void _updateBrokerStatus() {
+    if (widget.mqttConnection.isConnected) {
+      final status = widget.mqttConnection.isLocal
+          ? "✅ Connected to LOCAL broker"
+          : "☁️ Connected to CLOUD broker";
 
-    setState(() {
-      isDiscovering = true;
-      brokerStatus = "🔍 Searching for MQTT broker...";
-    });
-
-    try {
-      if (widget.mqttConnection.isConnected && widget.mqttConnection.isLocal) {
-        // Switch to cloud
-        await widget.mqttConnection.disconnect();
-        await widget.mqttConnection.connect('152.42.241.179', isLocal: false); // Using public method
-        setState(() {
-          brokerStatus = "☁️ Connected to CLOUD broker";
-        });
-      } else {
-        // Try to discover local broker
-        final mdnsResult = await discoverMqttBrokerViaMdns();
-        if (mdnsResult != null) {
-          await widget.mqttConnection.disconnect();
-          await widget.mqttConnection.connect(mdnsResult, isLocal: true); // Using public method
-          setState(() {
-            brokerStatus = "✅ Connected to LOCAL broker at: $mdnsResult";
-          });
-        } else {
-          // Fall back to cloud if local not found
-          await widget.mqttConnection.disconnect();
-          await widget.mqttConnection.connect('152.42.241.179', isLocal: false); // Using public method
-          setState(() {
-            brokerStatus = "☁️ Connected to CLOUD broker (local not found)";
-          });
-        }
-      }
-    } catch (e) {
       setState(() {
-        brokerStatus = "❌ Connection error: ${e.toString()}";
+        brokerStatus = status;
       });
-    } finally {
-      setState(() => isDiscovering = false);
+
+      brokerNotifier.updateStatus(status);
+    } else {
+      setState(() {
+        brokerStatus = "❌ Not connected to any broker";
+      });
+
+      brokerNotifier.updateStatus("❌ Not connected to any broker");
     }
   }
+
+   void _discoverLocalBroker() async {
+      if (isDiscovering) return;
+
+      setState(() {
+        isDiscovering = true;
+        brokerStatus = "🔍 Searching for MQTT broker...";
+      });
+      brokerNotifier.updateStatus("🔍 Searching for MQTT broker...");
+
+      try {
+        if (widget.mqttConnection.isConnected && widget.mqttConnection.isLocal) {
+          // Switch to cloud
+          await widget.mqttConnection.disconnect();
+          await widget.mqttConnection.connect('152.42.241.179', isLocal: false);
+          setState(() {
+            brokerStatus = "☁️ Connected to CLOUD broker";
+          });
+          brokerNotifier.updateStatus("☁️ Connected to CLOUD broker");
+        } else {
+          // Try to discover local broker
+          final mdnsResult = await discoverMqttBrokerViaMdns();
+          if (mdnsResult != null) {
+            await widget.mqttConnection.disconnect();
+            await widget.mqttConnection.connect(mdnsResult, isLocal: true);
+            setState(() {
+              brokerStatus = "✅ Connected to LOCAL broker at: $mdnsResult";
+            });
+            brokerNotifier.updateStatus("✅ Connected to LOCAL broker");
+          } else {
+            // Fall back to cloud if local not found
+            await widget.mqttConnection.disconnect();
+            await widget.mqttConnection.connect('152.42.241.179', isLocal: false);
+            setState(() {
+              brokerStatus = "☁️ Connected to CLOUD broker (local not found)";
+            });
+            brokerNotifier.updateStatus("☁️ Connected to CLOUD broker ");
+          }
+        }
+      } catch (e) {
+        final errorMsg = "❌ Connection error: ${e.toString()}";
+        brokerNotifier.updateStatus(errorMsg);
+        setState(() {
+          brokerStatus = errorMsg;
+        });
+      } finally {
+        setState(() => isDiscovering = false);
+      }
+    }
+  
 
   void _checkBrokerStatus() async {
     setState(() {
@@ -194,7 +216,7 @@ class _UdpListenerPageState extends State<UdpListenerPage> {
           ),
 
            Container(
-            color: Colors.deepPurple,
+            decoration: buildCustomGradient(),
             height: kToolbarHeight,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:p9_rgbridge/notifiers/broker_status_notifier.dart';
 import 'package:p9_rgbridge/screen/colorRingControl.dart';
 import 'package:p9_rgbridge/screen/mqtt_discovery.dart';
 import 'package:p9_rgbridge/screen/smart_config.dart';
 import 'package:p9_rgbridge/screen/udp_listen.dart';
 import 'package:p9_rgbridge/services/mqtt_connection.dart';
+import 'package:p9_rgbridge/share/gradient_colour.dart';
+import 'package:provider/provider.dart';
 
 class NavBar extends StatefulWidget {
   final String? deviceId; // Pass deviceId if needed
@@ -24,27 +27,23 @@ class _NavBarState extends State<NavBar> {
     super.initState();
     _initializeMqtt();
   }
+  
 
   Future<void> _initializeMqtt() async {
-    setState(() {
-      _isConnecting = true;
-      _connectionStatus = "🔄 Connecting...";
-    });
+    final brokerNotifier = context.read<BrokerStatusNotifier>();
+    brokerNotifier.updateStatus("🔄 Connecting...", connecting: true);
 
     try {
       await _mqttConnection.initialize();
-      setState(() {
-        _connectionStatus = _mqttConnection.isLocal
+      brokerNotifier.updateStatus(
+        _mqttConnection.isLocal
             ? "✅ Connected to LOCAL broker"
-            : "☁️ Connected to CLOUD broker";
-      });
+            : "☁️ Connected to CLOUD broker",
+        connecting: false,
+      );
     } catch (e) {
-      setState(() {
-        _connectionStatus = "❌ Not connected";
-      });
+      brokerNotifier.updateStatus("❌ Not connected", connecting: false);
       debugPrint('MQTT Initialization failed: $e');
-    } finally {
-      setState(() => _isConnecting = false);
     }
   }
 
@@ -54,59 +53,72 @@ class _NavBarState extends State<NavBar> {
     super.dispose();
   }
   
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      // ✅ This AppBar shows connection status on all screens
-      appBar: AppBar(
-        backgroundColor: const Color.fromARGB(255, 222, 139, 57),
-        title: Text(
-          _isConnecting ? '🔄 $_connectionStatus' : '🛰️ $_connectionStatus',
-          style: const TextStyle(color: Colors.white, fontSize:16),
-        ),
-      ),
-      body: SafeArea(
-        child: IndexedStack(
-          index: currentPageIndex,
-          children: [
-            ColorRingControl(
-              key: UniqueKey(), // ✅ Guaranteed unique
-              mqttConnection: _mqttConnection,
+    return Consumer<BrokerStatusNotifier>(
+      builder: (context, brokerNotifier, _) {
+        return Scaffold(
+          appBar: AppBar(
+            backgroundColor: Colors.transparent, // make default background transparent
+            flexibleSpace: Container(
+              decoration: buildWarmGradient(),
             ),
-            AddDevice(),
-            UdpListenerPage(mqttConnection: _mqttConnection),
-          ],
-        ),
-      ),
-
-      bottomNavigationBar: NavigationBar(
-        onDestinationSelected: (int index) {
-          setState(() {
-            currentPageIndex = index;
-          });
-        },
-        indicatorColor: Colors.amber.withOpacity(0.2),
-        selectedIndex: currentPageIndex,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: const <Widget>[
-          NavigationDestination(
-            selectedIcon: Icon(Icons.lightbulb, color: Colors.amber),
-            icon: Icon(Icons.lightbulb_outline),
-            label: 'Device',
+            title: Text(
+              brokerNotifier.isConnecting
+                  ? '🔄 ${brokerNotifier.status}'
+                  : '🛰️ ${brokerNotifier.status}',
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+            ),
           ),
-          NavigationDestination(
-            selectedIcon: Icon(Icons.add_circle, color: Colors.amber),
-            icon: Icon(Icons.add_circle_outline),
-            label: 'Add Device',
+          body: SafeArea(
+            child: IndexedStack(
+              index: currentPageIndex,
+              children: [
+                ColorRingControl(
+                  key: UniqueKey(),
+                  mqttConnection: _mqttConnection,
+                ),
+                AddDevice(
+                  onSmartConfigSuccess: () {
+                    setState(() {
+                      currentPageIndex = 0;
+                    });
+                  },
+                ),
+                UdpListenerPage(mqttConnection: _mqttConnection),
+              ],
+            ),
           ),
-          NavigationDestination(
-            selectedIcon: Icon(Icons.network_check, color: Colors.amber),
-            icon: Icon(Icons.network_check_outlined),
-            label: 'Network',
+          bottomNavigationBar: NavigationBar(
+            onDestinationSelected: (int index) {
+              setState(() {
+                currentPageIndex = index;
+              });
+            },
+            indicatorColor: Colors.amber.withOpacity(0.2),
+            selectedIndex: currentPageIndex,
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            destinations: const <Widget>[
+              NavigationDestination(
+                selectedIcon: Icon(Icons.lightbulb, color: Colors.amber),
+                icon: Icon(Icons.lightbulb_outline),
+                label: 'Device',
+              ),
+              NavigationDestination(
+                selectedIcon: Icon(Icons.add_circle, color: Colors.amber),
+                icon: Icon(Icons.add_circle_outline),
+                label: 'Add Device',
+              ),
+              NavigationDestination(
+                selectedIcon: Icon(Icons.network_check, color: Colors.amber),
+                icon: Icon(Icons.network_check_outlined),
+                label: 'Network',
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
-
 }

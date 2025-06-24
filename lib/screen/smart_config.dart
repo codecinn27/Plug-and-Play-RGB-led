@@ -5,7 +5,9 @@ import 'package:esp_smartconfig/esp_smartconfig.dart';
 import 'package:p9_rgbridge/share/styled_text.dart';
 
 class AddDevice extends StatefulWidget {
-  const AddDevice({super.key});
+  final VoidCallback? onSmartConfigSuccess;
+
+  const AddDevice({super.key, this.onSmartConfigSuccess});
 
   @override
   State<AddDevice> createState() => _AddDeviceState();
@@ -28,6 +30,18 @@ class _AddDeviceState extends State<AddDevice> {
       SnackBar(content: Text(connected ? 'Connected to WiFi' : 'Not connected to WiFi')),
     );
   }
+  void _onDeviceProvisioned(ProvisioningResponse response) {
+    final ip = response.ipAddressText ?? 'Unknown IP';
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('✅ Device added successfully\n🛰️ IP Address: $ip'),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+
+    widget.onSmartConfigSuccess?.call(); // ✅ Switch to tab index 0
+  }
 
   Future<void> startSmartConfig() async {
     if (_ssidController.text.isEmpty || _passwordController.text.isEmpty) {
@@ -38,9 +52,10 @@ class _AddDeviceState extends State<AddDevice> {
     }
 
     final provisioner = Provisioner.espTouch();
-
+    ProvisioningResponse? smartConfigResponse;
     provisioner.listen((response) {
-      Navigator.of(context).pop(response);
+      smartConfigResponse = response; // ✅ Save the result
+      Navigator.of(context, rootNavigator: true).pop(); // ✅ Close dialog
     });
 
     provisioner.start(ProvisioningRequest.fromStrings(
@@ -71,39 +86,16 @@ class _AddDeviceState extends State<AddDevice> {
       provisioner.stop();
     }
 
-    if (response != null) {
-      _onDeviceProvisioned(response);
+    // Handle result
+    if (smartConfigResponse != null) {
+      _onDeviceProvisioned(smartConfigResponse!);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('❌ SmartConfig failed or was cancelled')),
+      );
     }
   }
 
-  _onDeviceProvisioned(ProvisioningResponse response) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Device provisioned'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text('Device successfully connected to the ${_ssidController.text} network'),
-              SizedBox.fromSize(size: const Size.fromHeight(20)),
-              const Text('Device:'),
-              Text('IP: ${response.ipAddressText}'),
-              Text('BSSID: ${response.bssidText}'),
-            ],
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('OK'),
-            ),
-          ],
-        );
-      },
-    );
-  }
 
   @override
   void dispose() {
@@ -124,13 +116,13 @@ class _AddDeviceState extends State<AddDevice> {
                 children: [
                   const SizedBox(height: 70),
                   SvgPicture.asset(
-                    'assets/space-awesome-brands.svg',
+                    'assets/light-bulb-svgrepo-com.svg',
                     height: 100,
                     width: 100,
                     fit: BoxFit.contain,
                   ),
                   const SizedBox(height: 30),
-                  const StyledHeading('ESP 8266 SmartConfig')
+                  const StyledText('RGBridge'),
                 ],
               ),
               const SizedBox(height: 30),
