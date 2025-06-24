@@ -28,7 +28,7 @@ class _ColorRingControlState extends State<ColorRingControl> {
   String? currentUdpId = 'DL8_00008F50E2'; // ✅ Default value
   Timer? _refreshTimer;
   String topic = 'rgb/unknown/dfd34'; // initial value
-
+  bool _isInitialized = false;
   @override
   void initState() {
     super.initState();
@@ -41,6 +41,9 @@ class _ColorRingControlState extends State<ColorRingControl> {
           topic = 'rgb/$savedId';
         });
         debugPrint('📥 Loaded saved Device ID: $savedId');
+        setState(() {
+          _isInitialized = true;
+        });
       }
     });
 
@@ -120,6 +123,9 @@ class _ColorRingControlState extends State<ColorRingControl> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_isInitialized) {
+      return const Center(child: CircularProgressIndicator());
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
